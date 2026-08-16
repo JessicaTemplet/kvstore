@@ -1,0 +1,17 @@
+# Compiled binary
+/kvstore
+kvstore.exe
+*.exe
+*.test
+
+# AOF files a local run might produce
+*.aof
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
