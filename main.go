@@ -55,16 +55,32 @@ func main() {
 	// Shut down cleanly on Ctrl-C/SIGTERM: stop accepting new connections,
 	// let in-flight commands finish, then flush the AOF via the deferred
 	// Close calls above.
+	//
+	// Serve runs on its own goroutine so main can wait on whichever
+	// finishes first: a signal, or Serve returning on its own (e.g. a
+	// listen error). Shutdown is called synchronously from main, so we
+	// only reach the deferred aof.Close/store.Close once Shutdown has
+	// actually finished draining in-flight connections, instead of
+	// racing ahead as soon as Serve's Accept loop unblocks.
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	serveErr := make(chan error, 1)
 	go func() {
-		<-sigCh
-		log.Println("shutting down...")
-		server.Shutdown()
+		serveErr <- server.Serve(*addr)
 	}()
 
-	if err := server.Serve(*addr); err != nil {
-		log.Fatalf("server error: %v", err)
+	select {
+	case <-sigCh:
+		log.Println("shutting down...")
+		server.Shutdown()
+		if err := <-serveErr; err != nil {
+			log.Fatalf("server error: %v", err)
+		}
+	case err := <-serveErr:
+		if err != nil {
+			log.Fatalf("server error: %v", err)
+		}
 	}
 }
 
